@@ -1,17 +1,47 @@
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
+from threading import Lock
+
 import os
 
 app = Flask(__name__)
 CORS(app) 
 
-# make this directory the current directory
 FILES_DIRECTORY = '.'  # Ensure this directory exists
+directory_lock = Lock()
+
+@app.route('/get_directories', methods=['GET'])
+def get_directories():
+    path = request.args.get('path', FILES_DIRECTORY)
+    try:
+        directories = [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
+        return jsonify({'directories': directories}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# add
+@app.route('/change_directory', methods=['POST'])
+def change_directory():
+    new_path = request.json.get('path')
+    if not new_path:
+        return jsonify({'error': 'No path provided'}), 400
+
+    if not os.path.isdir(new_path):
+        return jsonify({'error': 'Directory does not exist'}), 404
+
+    with directory_lock:
+        FILES_DIRECTORY = new_path
+
+    return jsonify({'message': 'Directory changed successfully'}), 200
+
 
 @app.route('/get_files', methods=['GET'])
 def get_files():
     try:
-        files = os.listdir(FILES_DIRECTORY)
+        path = request.args.get('path', FILES_DIRECTORY)
+        files = os.listdir(path)
+
         # Filter out non-files if necessary
         files = [f for f in files if os.path.isfile(os.path.join(FILES_DIRECTORY, f))]
         return jsonify({'files': files}), 200
